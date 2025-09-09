@@ -13,10 +13,8 @@ export class GoogleAuthService{
   public xlsx;
   constructor(
     @Inject("CONFIG") private config: GoogleDriveConfig,
-    @Inject("FOLDERBASEID") private googleDriveFolderBaseId: string,
-    @Inject("CONFIG_SHEETID_FILE") public googleXlsxSpreadSheetId: string,
-    @Inject("GOOGLEXLSXCONFIG") public googleHojas: Array<IGoogleXlsConfig>,
-    
+    @Inject("SHEETIDALMACEN") private sheetIdAlmacen: string,
+    @Inject("SHEETIDPERSONAL") private sheetIdPersonal: string
   ) {
     const auth = new google.auth.GoogleAuth({
       credentials: {

@@ -77,8 +77,8 @@ const concreteSheetAsistencias = [EMesesAnio.ENERO,EMesesAnio.FEBRERO,EMesesAnio
         "universe_domain": "googleapis.com"
          
       }as GoogleDriveConfig,
-      '1Y3weOs-ZCOjB8ndIYKaQJd_bqQ-K15Lt',//carpeta base SAD 1Y3weOs-ZCOjB8ndIYKaQJd_bqQ-K15Lt
-      '171QJrvwwwfZ0HozPwTkF8fkz7Ufq7vgaD96uAmgTmK4',//spreadsheetId,
+      "171QJrvwwwfZ0HozPwTkF8fkz7Ufq7vgaD96uAmgTmK4",
+      "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8"
       
       ),
       GestionalmacenModule,
