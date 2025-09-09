@@ -20,11 +20,11 @@ export class GoogleXlsxService extends GoogleAuthService {
    * @param nameSheet es el nombre de la hoja que se va a agregar. 
    * @returns retorna un observable con el estado de la operacion
    */
-  public createSheet(nameSheet:string){
+  public createSheet(nameSheet:string,spreadSheetId:string){
         
     try {
             const res:Observable<any> = this.xlsx.spreadsheets.batchUpdate({
-              spreadsheetId: this.googleXlsxSpreadSheetId,
+              spreadsheetId:spreadSheetId,
               requestBody: {
                 requests: [{
 
@@ -45,9 +45,9 @@ export class GoogleXlsxService extends GoogleAuthService {
             throw err;
           }
     }
-    public async getRows(sheetName:string,columnLetterInitial:string,columnLetterFinal:string,spreadSheetId?:string):Promise<string[][]>  {
+    public async getRows(sheetName:string,columnLetterInitial:string,columnLetterFinal:string,spreadSheetId:string):Promise<string[][]>  {
       const range = `${sheetName}!${columnLetterInitial}:${columnLetterFinal}`;
-      const spreadsheetId:string = spreadSheetId || this.googleXlsxSpreadSheetId
+      const spreadsheetId:string = spreadSheetId
       try {
             const res= await this.xlsx.spreadsheets.values.get({spreadsheetId,range})
             return res
@@ -56,7 +56,7 @@ export class GoogleXlsxService extends GoogleAuthService {
             throw err;
           }
     }
-    async getLastValueInColumnv2(sheetName:string, columnLetterInitial:string,columnLetterFinal:string,spreadSheetId?:string) {
+    async getLastValueInColumnv2(sheetName:string, columnLetterInitial:string,columnLetterFinal:string,spreadSheetId:string) {
       //const range = `${sheetName}!${columnLetterInitial}:${columnLetterFinal}`;
       const response:any = await this.getRows(sheetName,columnLetterInitial,columnLetterFinal,spreadSheetId)
       
@@ -96,10 +96,10 @@ export class GoogleXlsxService extends GoogleAuthService {
         throw error;
     }
     }
-    public async setRow<T>(data:T,range:string,spreadSheetId?:string){
+    public async setRow<T>(data:T,range:string,spreadSheetId:string){
         const valueInputOption='USER_ENTERED'
         const dataInput: T = data
-        const spreadsheetId:string = spreadSheetId || this.googleXlsxSpreadSheetId
+        const spreadsheetId:string = spreadSheetId;
           try {
             const res = await this.xlsx.spreadsheets.values.append({
               spreadsheetId,
@@ -110,7 +110,7 @@ export class GoogleXlsxService extends GoogleAuthService {
                 values: dataInput,
               },
             })
-            console.log(this.googleHojas)
+            
             return res.status
           } catch (err) {
             // TODO (developer) - Handle exception
