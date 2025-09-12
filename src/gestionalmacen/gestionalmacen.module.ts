@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ComprasController } from './compras/compras.controller';
-import { SalidasController } from './salidas/salidas.controller';
-import { AlmacenController } from './almacen/almacen.controller';
-import { AlmacenService } from './services/almacen.service';
+import { ComprasController } from './controllers/compras.controller';
+import { SalidasController } from './controllers/salidas.controller';
+import { AlmacenController } from './controllers/almacen.controller';
+import { GestionAlmacenService } from './services/gestion.almacen.service';
 
 @Module({
     controllers: [ComprasController,AlmacenController,SalidasController],
-    providers: [AlmacenService]
+    providers: [GestionAlmacenService]
 })
 export class GestionalmacenModule {}
