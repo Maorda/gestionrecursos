@@ -1,9 +1,17 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { GoogleXlsxService } from 'src/managergooglexls/services/google.manager.xls.service';
+import {Personal, PersonalDto } from '../dtos/personal.dto';
+import { obtenerPropiedades } from 'src/decorators/column.decorator';
+import { consecutivo } from 'src/utilidades/utils';
+import { string } from 'joi';
+
+
 
 interface GeneralObject {
     [key: string]: any
 }
+// Define la interfaz para el vector de doble entrada, que representa el calendario de la semana.
+type WeekCalendar = [string, string][];
 
 const nombreColumna: GeneralObject = {}
 nombreColumna["1"] = "E";
@@ -64,21 +72,44 @@ export class PersonalService {
         const today = new Date();
         //la respuesta se da en ingles
         const monthName = today.toLocaleString('default', { month: 'long' });
-        console.log(monthName)
-
-        //return this.googleXlsxService.getRows(nameSheets.ASISTENCIA, "E", "AE", this.spredSheetId)
+        const lastRow = await this.googleXlsxService.getLastValueInColumnv2(monthName, "A", "A", this.spredSheetId)
+        const payloadRange:any = await this.googleXlsxService.getRows(monthName,"A3",`AE${lastRow}`,this.spredSheetId)
+        const range:string[][]  = payloadRange.data.values
+        const sumaDobleEntrada = sumarValoresPorElemento(range)
+        return sumaDobleEntrada
     }
     async getAsistenciaMonth(mes: string,personal:string) {
-        const today = new Date();
+        const today = mes || new Date();
         //la respuesta se da en ingles
         const monthName = today.toLocaleString('default', { month: 'long' });
+        console.log(monthName)
         const lastRow =await this.googleXlsxService.getLastValueInColumnv2(monthName, "E", "AE", this.spredSheetId)
-        const payloadRange:any =  await this.googleXlsxService.getRows(monthName, "E1", `AE${lastRow}`, this.spredSheetId)
-        const payload = payloadRange.data.values
-        console.log(payload[0],payload[1])
-        return payload
-        //return this.googleXlsxService.getRows(nameSheets.ASISTENCIA, "E", "AE", this.spredSheetId)
+        const payloadRange:any =  await this.googleXlsxService.getRows(monthName, "A3", `AE${lastRow}`, this.spredSheetId)
+        const payload:string[][]  = payloadRange.data.values
+        const resultado = sumarValores(payload, personal);
+        return resultado
+        
     }
+  async getAsistenciaWeek(fecha : string) {
+    // Ejemplo de uso con la fecha "24/09/2025"
+    const date = fecha;
+    const weekDays = getWeekDaysList(date);
+    const fe = [
+      ["Lunes", "22/09/2025"],
+      ["Martes", "23/09/2025"],
+      ["Miércoles", "24/09/2025"],
+      ["Jueves", "25/09/2025"],
+      ["Viernes", "26/09/2025"],
+      ["Sábado", "27/09/2025"]
+    ]
+
+    return weekDays
+
+    
+
+    // Resultado esperado: 22/09/2025 - 27/09/2025
+  }
+
     async insertaAsistencia(idpersonas: Array<number[]>) {
         const today = new Date();
         //la respuesta se da en ingles
@@ -86,7 +117,7 @@ export class PersonalService {
 
 
         let diaMes: number = 0;//representa la fecha que coincide con la fecha actual
-        let personal: Array<any> //representa al registro del trabajador
+        let personal:Array<any>  //representa al registro del trabajador
         const payloadColumna: any = await this.googleXlsxService.getRows(monthName, "E1", "AE1", "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
         const ve = payloadColumna.data.values[0]
 
@@ -119,10 +150,20 @@ export class PersonalService {
 
         return ve
     }
-    async insertaPersonal(data: Array<any[]>) {
-        const lastPersonal = await this.googleXlsxService.getLastValueInColumnv2("REGISTROPERSONAL", "A", "A", "171QJrvwwwfZ0HozPwTkF8fkz7Ufq7vgaD96uAmgTmK4")
-        console.log(`REGISTROPERSONAL!A${lastPersonal}:AE${lastPersonal}`)
-        const newPersonal = await this.googleXlsxService.setRow(data, `REGISTROPERSONAL!A${lastPersonal + 1}:E${lastPersonal + 1}`, "171QJrvwwwfZ0HozPwTkF8fkz7Ufq7vgaD96uAmgTmK4")
+    async insertaPersonal(data: Personal) {
+        let nuevoPersonal = new Personal()
+        nuevoPersonal.nombresapellidos = data.nombresapellidos.toUpperCase()
+        nuevoPersonal.dni = data.dni.toUpperCase()
+        nuevoPersonal.celular = data.celular.toUpperCase()
+        nuevoPersonal.activo = data.activo
+
+        //const atributos = obtenerPropiedades(nuevoPersonal);
+        const vector = Object.keys(nuevoPersonal).map(key => nuevoPersonal[key]);
+
+        const lastPersonal = await this.googleXlsxService.getLastValueInColumnv2("REGISTROPERSONAL", "A", "A", "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
+        vector[0] = consecutivo("PER",lastPersonal)
+        console.log(nuevoPersonal)
+        const newPersonal = await this.googleXlsxService.setRow([vector], `REGISTROPERSONAL!A${lastPersonal + 1}:E${lastPersonal + 1}`, "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
         return newPersonal
 
     }
@@ -161,3 +202,169 @@ function esFechaActual(fechaStr: string): boolean {
     console.log("mes", mismoMes)
     return mismoAnio && mismoMes && mismoDia;
 }
+/**
+ * @description este script permite sumar elementos a considerando numeros a partir del segundo elemento
+ * @argument arr es el arreglo de este formato string[][]
+ * @argument busqueda es el primer elemento que será buscando en el array
+ * @example const resultado = sumarValores(datos, "dos");
+console.log(resultado); // Imprimirá 3
+ */
+function sumarValores(arr: string[][], busqueda: string): number {
+    const elemento = arr.find(item => item[0] === busqueda);
+  
+    if (elemento) {
+      // Filtrar los elementos vacíos y sumar los que tienen valores numéricos
+      return elemento.slice(1).reduce((suma, valor) => {
+        // Reemplaza la coma por un punto para que el valor sea un decimal válido
+        const valorNumerico = parseFloat(valor.replace(',', '.'));
+        // Si el valor no es un número válido, lo trata como 0
+        return suma + (isNaN(valorNumerico) ? 0 : valorNumerico);
+      }, 0);
+    }
+  
+    return 0; // Retorna 0 si no se encuentra el elemento
+  }
+/**
+ * @description este script permite sumar elementos a considerando numeros a partir del segundo elemento const datos: string[][]
+ * @argument arr es el arreglo de este formato string[][]
+ * @argument busqueda es el primer elemento que será buscando en el array
+ * @example const resultado = sumarValoresPorElemento(datos)
+ */
+  function sumarValoresPorElemento(arr: string[][]): [string, number][] {
+    const resultados: [string, number][] = [];
+  
+    for (const elemento of arr) {
+      const clave = elemento[0];
+      const suma = elemento.slice(1).reduce((total, valor) => {
+        // Reemplaza la coma por un punto para un correcto parseo a float
+        const valorNumerico = parseFloat(valor.replace(',', '.'));
+        // Agrega el valor solo si es un número válido, de lo contrario suma 0
+        return total + (isNaN(valorNumerico) ? 0 : valorNumerico);
+      }, 0);
+  
+      resultados.push([clave, suma]);
+    }
+  
+    return resultados;
+  }
+/**
+ * Obtiene un vector de doble entrada con los días de la semana y sus fechas correspondientes,
+ * excluyendo el domingo.
+ * @param dateString La fecha en formato "DD/MM/YYYY".
+ * @returns Un array de arrays, donde cada sub-array contiene el nombre del día y la fecha.
+ */
+function getWeekDaysList(dateString: string): WeekCalendar {
+  // Parseamos la fecha de entrada.
+  const [day, month, year] = dateString.split('/').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  // Array de nombres de días de la semana en español.
+  const daysOfWeekNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+  // Ajustamos el día de la semana para que el lunes sea 0.
+  let dayOfWeek = date.getDay();
+  if (dayOfWeek === 0) {
+    dayOfWeek = 7;
+  }
+
+  // Calculamos el lunes de la semana.
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - (dayOfWeek - 1));
+
+  // Formateamos las fechas a "DD/MM/YYYY".
+  const format = (d: Date): string => {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // Creamos el vector de doble entrada.
+  const weekList: WeekCalendar = [];
+  for (let i = 0; i < 6; i++) { // Iteramos 6 veces para incluir de lunes a sábado.
+    const currentDay = new Date(monday);
+    currentDay.setDate(monday.getDate() + i);
+
+    const dayName = daysOfWeekNames[currentDay.getDay()];
+    const formattedDate = format(currentDay);
+
+    weekList.push([dayName, formattedDate]);
+  }
+
+  return weekList;
+}
+
+// Ejemplo de uso con la fecha "24/09/2025"
+const date = "24/09/2025";
+const weekDays = getWeekDaysList(date);
+
+console.log(`Lista de días de la semana para la fecha ${date}:`);
+console.log(weekDays);
+
+/* Resultado esperado:
+[
+  ["Lunes", "22/09/2025"],
+  ["Martes", "23/09/2025"],
+  ["Miércoles", "24/09/2025"],
+  ["Jueves", "25/09/2025"],
+  ["Viernes", "26/09/2025"],
+  ["Sábado", "27/09/2025"]
+]
+*/
+// Define la interfaz para el rango de fechas.
+interface DateRange {
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * Obtiene el rango de fechas (lunes a sábado) para la semana de una fecha dada,
+ * omitiendo el domingo.
+ * @param dateString La fecha en formato "DD/MM/YYYY".
+ * @returns Un objeto DateRange con las fechas de inicio y fin de la semana.
+ */
+function getWeekRangeExcludingSunday(dateString: string): DateRange {
+  // Parseamos la fecha del formato "DD/MM/YYYY" a un objeto Date.
+  const [day, month, year] = dateString.split('/').map(Number);
+  const date = new Date(year, month - 1, day); // month - 1 porque los meses en Date son de 0 a 11.
+
+  // Obtenemos el día de la semana (0 = domingo, 1 = lunes, etc.).
+  let dayOfWeek = date.getDay();
+
+  // Ajustamos el día de la semana para que el lunes sea 0.
+  // Si el día es domingo (0), lo cambiamos a 7 para que el cálculo sea correcto.
+  if (dayOfWeek === 0) {
+    dayOfWeek = 7;
+  }
+  
+  // Calculamos el lunes de la semana.
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - (dayOfWeek - 1));
+
+  // Calculamos el sábado de la semana, sumando 5 días al lunes.
+  // Esto omite el domingo que sería el séptimo día de la semana.
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+
+  // Formateamos las fechas a "DD/MM/YYYY".
+  const format = (d: Date): string => {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  return {
+    startDate: format(monday),
+    endDate: format(saturday),
+  };
+}
+
+// Ejemplo de uso con la fecha "24/09/2025"
+const date1 = "24/09/2025";
+const weekRange = getWeekRangeExcludingSunday(date1);
+
+console.log(`Fecha de entrada: ${date1}`);
+console.log(`Rango de la semana (sin domingo): ${weekRange.startDate} - ${weekRange.endDate}`);
+
+// Resultado esperado: 22/09/2025 - 27/09/2025
