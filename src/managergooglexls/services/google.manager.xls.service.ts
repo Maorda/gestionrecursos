@@ -12,7 +12,139 @@ interface GeneralObject{
  }
 @Injectable()
 export class GoogleXlsxService extends GoogleAuthService {
+  /**
+   * Cambia el color de fondo de una celda específica.
+   * @param spreadsheetId El ID de la hoja de cálculo.
+   * @param sheetName El nombre de la hoja.
+   * @param range La celda o rango en notación A1 (ej. 'A1').
+   * @param color El color en formato RGB (red, green, blue).
+   */
+  async updateCell(
+    spreadsheetId: string,
+    sheetName: string,
+    range: string,
+    color: { red: number; green: number; blue: number },
+  ) {
+    const sheetId = await this.getSheetIdByName(spreadsheetId, sheetName);
 
+    if (sheetId === null) {
+      throw new Error(`No se encontró una hoja con el nombre: "${sheetName}"`);
+    }
+
+    const formattedRange = this.getGridRangeFromA1(range, sheetId);
+
+    const requests = [
+      {
+        updateCells: {
+          range: formattedRange,
+          rows: [
+            {
+              values: [
+                {
+                  userEnteredFormat: {
+                    backgroundColor: {
+                      red: color.red,
+                      green: color.green,
+                      blue: color.blue,
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+          fields: 'userEnteredValue,userEnteredFormat.backgroundColor',
+        },
+      },
+    ];
+
+    try {
+      const response = await this.xlsx.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      });
+      console.log('Respuesta de la API:', response.data);
+      return response.data;
+    } catch (err) {
+      console.error('Error al actualizar la celda:', err);
+      throw err;
+    }
+  }
+  /**
+   * Cambia el color de fondo de una celda específica.
+   * @param spreadsheetId El ID de la hoja de cálculo.
+   * @param sheetName El nombre de la hoja.
+   * @param range La celda o rango en notación A1 (ej. 'A1').
+   * @param color El color en formato RGB (red, green, blue).
+   */
+  async updateCellBackgroundColor(
+    spreadsheetId: string,
+    sheetName: string,
+    range: string,
+    color: { red: number; green: number; blue: number },
+  ) {
+    const sheetId = await this.getSheetIdByName(spreadsheetId, sheetName);
+
+    if (sheetId === null) {
+      throw new Error(`No se encontró una hoja con el nombre: "${sheetName}"`);
+    }
+
+    const formattedRange = this.getGridRangeFromA1(range, sheetId);
+
+    const requests = [
+      {
+        updateCells: {
+          range: formattedRange,
+          rows: [
+            {
+              values: [
+                {
+                  userEnteredFormat: {
+                    backgroundColor: {
+                      red: color.red,
+                      green: color.green,
+                      blue: color.blue,
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+          fields: 'userEnteredFormat.backgroundColor',
+        },
+      },
+    ];
+
+    try {
+      const response = await this.xlsx.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      });
+      console.log('Respuesta de la API:', response.data);
+      return response.data;
+    } catch (err) {
+      console.error('Error al actualizar la celda:', err);
+      throw err;
+    }
+  }
+
+  private getGridRangeFromA1(a1Range: string, sheetId: number) {
+    const match = a1Range.match(/^([A-Z]+)(\d+)$/);
+    if (!match) throw new Error('Rango A1 inválido');
+    const [, columnStr, rowStr] = match;
+
+    const startColumnIndex = columnStr
+      .split('')
+      .reduce((sum, char) => sum * 26 + char.charCodeAt(0) - 64, 0) - 1;
+    const startRowIndex = parseInt(rowStr, 10) - 1;
+
+    return {
+      sheetId,
+      startRowIndex,
+      endRowIndex: startRowIndex + 1,
+      startColumnIndex,
+      endColumnIndex: startColumnIndex + 1,
+    };
+  }
   
   /**
    * 
@@ -49,12 +181,68 @@ export class GoogleXlsxService extends GoogleAuthService {
       const range = `${sheetName}!${columnLetterInitial}:${columnLetterFinal}`;
       const spreadsheetId:string = spreadSheetId
       try {
-            const res= await this.xlsx.spreadsheets.values.get({spreadsheetId,range})
-            return res
+            const res:any= await this.xlsx.spreadsheets.values.get({spreadsheetId,range})
+            return res.data.values
           } catch (err) {
             // TODO (developer) - Handle exception
             throw err;
           }
+    }
+  /**
+   * @param spreadsheetId = 'TU_ID_DEL_DOCUMENTO_AQUI'; // El ID largo de la URL del Google Sheet
+   * @param sheetName = 'Hoja1'; // El nombre de la hoja (tab)
+   * @param rowNumber = 7; // La fila de inicio es ahora la fila 7
+   * @param startColumnLetter  'C'; // La fila inicia en la columna C
+   * @param startColumnIndex C es la 3ra columna (A=1, B=2, C=3)
+   * @returns 
+   */
+    async getLastColumnInfoInRow(
+      spreadsheetId: string, 
+      sheetName: string, 
+      rowNumber: number,
+      startColumnLetter: string,
+      startColumnIndex: number
+  ): Promise<{ lastValue: string; columnLetter: string; range: string } | undefined> {
+       
+      // Rango de búsqueda: 'Hoja1!C7:ZZZ7' (usamos ZZZ para cubrir un rango muy amplio)
+      const range = `${sheetName}!${startColumnLetter}${rowNumber}:ZZ${rowNumber}`;
+      
+      try {
+          const response = await this.xlsx.spreadsheets.values.get({
+              spreadsheetId,
+              range,
+              // Pedimos que la respuesta sea un array de filas (aunque solo sea una)
+              majorDimension: 'ROWS', 
+          });
+  
+          // La API devuelve un array de filas; tomamos la primera (y única)
+          const rowData = response.data.values?.[0]; 
+  
+          if (rowData && rowData.length > 0) {
+              // 1. Encontrar el índice del último valor en el array (0-based)
+              const lastDataIndex = rowData.length - 1; 
+              const lastValue = rowData[lastDataIndex];
+              
+              // 2. Calcular el índice absoluto de la columna (1-based)
+              // Índice inicial (C=3) + Desplazamiento desde el inicio del rango
+              const absoluteColumnIndex = startColumnIndex + lastDataIndex;
+              
+              // 3. Convertir el índice numérico a su letra A1
+              const columnLetter = columnToLetter(absoluteColumnIndex);
+  
+              return { 
+                  lastValue, 
+                  columnLetter, 
+                  range: `${columnLetter}${rowNumber}` 
+              };
+          } else {
+              console.log(`No se encontraron datos en el rango ${range}.`);
+              return undefined;
+          }
+      } catch (error) {
+          console.error('Error al obtener datos de Google Sheets:', error);
+          throw error;
+      }
     }
     async getLastValueInColumnv2(sheetName:string, columnLetterInitial:string,columnLetterFinal:string,spreadSheetId:string) {
       //const range = `${sheetName}!${columnLetterInitial}:${columnLetterFinal}`;
@@ -281,4 +469,60 @@ export class GoogleXlsxService extends GoogleAuthService {
     return  throwError('algo a sucedido; please try again later.');
   }
 
+  /**
+   * Obtiene el ID de una hoja por su nombre.
+   * @param spreadsheetId El ID de la hoja de cálculo.
+   * @param sheetName El nombre de la hoja.
+   * @returns El ID de la hoja o null si no se encuentra.
+   */
+  private async getSheetIdByName(spreadsheetId: string, sheetName: string): Promise<number | null> {
+    try {
+      const response = await this.xlsx.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets.properties',
+      });
+
+      const sheets = response.data.sheets;
+      const sheet = sheets.find(s => s.properties.title === sheetName);
+
+      return sheet ? sheet.properties.sheetId : null;
+    } catch (err) {
+      console.error('Error al obtener el ID de la hoja:', err);
+      throw err;
+    }
+  }
+
+}
+function getGridRangeFromA1(a1Range: string, sheetId: number) {
+  const match = a1Range.match(/^([A-Z]+)(\d+)$/);
+  if (!match) throw new Error('Rango A1 inválido');
+  const [, columnStr, rowStr] = match;
+
+  const startColumnIndex = columnStr
+    .split('')
+    .reduce((sum, char) => sum * 26 + char.charCodeAt(0) - 64, 0) - 1;
+  const startRowIndex = parseInt(rowStr, 10) - 1;
+
+  return {
+    sheetId,
+    startRowIndex,
+    endRowIndex: startRowIndex + 1,
+    startColumnIndex,
+    endColumnIndex: startColumnIndex + 1,
+  };
+}
+
+/**
+ * Función auxiliar para convertir un índice de columna (1-based) a su letra de notación A1.
+ * @param column El índice de columna (ej. 1 -> 'A', 26 -> 'Z', 27 -> 'AA').
+ * @returns La letra de la columna.
+ */
+function columnToLetter(column: number): string {
+  let temp: number, letter = '';
+  while (column > 0) {
+      temp = (column - 1) % 26;
+      letter = String.fromCharCode(temp + 65) + letter;
+      column = (column - temp - 1) / 26;
+  }
+  return letter;
 }

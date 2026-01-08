@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { GoogleXlsxService } from 'src/managergooglexls/services/google.manager.xls.service';
 import { PersonalService } from '../services/personal.service';
-import { Personal, PersonalDto } from '../dtos/personal.dto';
+import { PersonalDto } from '../dtos/gestion.personal.dto';
 
 @Controller('personal')
 export class AsistenciapersonalController {
@@ -26,7 +26,7 @@ export class AsistenciapersonalController {
     }
     @Get('insertpersonal')
     async insertPersonal(){
-        const persona:Personal = {
+        const persona:PersonalDto = {
             idpersonal:"123",
             nombresapellidos:"yo",
             dni:"12345678",

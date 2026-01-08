@@ -1,9 +1,8 @@
 import { HttpException, Injectable } from '@nestjs/common';
 import { GoogleXlsxService } from 'src/managergooglexls/services/google.manager.xls.service';
-import {Personal, PersonalDto } from '../dtos/personal.dto';
+import { PersonalDto, PlanillaDto } from '../dtos/gestion.personal.dto';
 import { obtenerPropiedades } from 'src/decorators/column.decorator';
 import { consecutivo } from 'src/utilidades/utils';
-import { string } from 'joi';
 
 
 
@@ -55,17 +54,87 @@ nombreColumna["27"] = "AE";
 
 @Injectable()
 export class PersonalService {
+    rowInit: number = 6;
+    colInit: string = "E";
+    colFinal: string = "AE";
+    colData:string = "A";
+    row_h_permiso: number = 0;
+    row_h_tardanzas: number = 0;
+    row_h_extras: number = 0;
     spredSheetId: string = "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8";
     constructor(
             private readonly googleXlsxService: GoogleXlsxService,
     ) { }
 
-    async setAsistenciaPersonal(dataAsistencia: Array<Array<string>>, mes: string) {
+    /**
+     * @see considerar que si es que no regresa antes de sus 8 horas de trabajo hacer los calculos y validaciones respectivas
+     * @param dataAsistencia 
+     * @param mes 
+     */
+    async setIniciaHoraPermiso(dataAsistencia: Array<Array<string>>, mes: string,idpersonal:string) {
+      const PERU_TIMEZONE = 'America/Lima';
+      const today: Date = new Date();
+      const monthName = today.toLocaleString('default', { month: 'long' });
+      const allPersonal: string[][] =await this.googleXlsxService.getRows(monthName,"A3","A",this.spredSheetId)
+      const nroCols = await this.googleXlsxService.getRows(monthName,"A3","AE3",this.spredSheetId)
+      const rowtarget: number = encontrarPosicion(allPersonal, idpersonal)
+      console.log(rowtarget,nroCols)
+      try {
+        const horaPeruana: string = today.toLocaleTimeString('es-PE', {
+          timeZone: PERU_TIMEZONE,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false // Formato de 24 horas
+      });  
+      const hora_inicia_pedido: string = generarFechaFormateada(today);
+      const hora_permiso = await this.googleXlsxService.setRow([[hora_inicia_pedido]],"AG4","1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
+      return hora_permiso
+      
+      //  
+      //  const minutosDeDiferencia: number = calcularDiferenciaEnMinutos(recupera_hora_permiso[0][0], horaPeruana);        
+      //  console.log(minutosDeDiferencia)
 
-        const lastRow = await this.googleXlsxService.getLastValueInColumnv2(nameSheets.REGISTROPERSONAL, "E", "AE", this.spredSheetId)
-        const addAsistencia = await this.googleXlsxService.setRow(dataAsistencia, `${nameSheets.PLANILLA}!A${lastRow + 1}:L${lastRow + 1}`, this.spredSheetId)
-        return addAsistencia
+        /*const info = await this.googleXlsxService.getLastColumnInfoInRow(this.spredSheetId, monthName,5,"E",5);
+        if (info) {
+          console.log(`El último valor encontrado es: "${info.lastValue}"`);
+          console.log(`Ubicado en la celda: ${info.range}`);
+      }*/
+        
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message);
+    } else {
+        console.error("Ocurrió un error desconocido al calcular la diferencia de minutos.");
     }
+    }   
+    }
+    //el cronometro se detienhe solo por un supervisor que serciora que esta regresando al trabajo
+    //una vez hecho esto la celda se modificará con la sgiguiente informacion [hora de salida] hasta [hora de llegada] minutos trabajados [minutos trabajados]
+    // en caso que ya no regrese el boton de apagado del cronometro seguira activo
+    // el cronometro será apagdo por el supervisor llenando en la celda solo las horas trabajadas 8hras - hora que inicia
+    async detenerCronometroPorPermiso(dataAsistencia: Array<Array<string>>, mes: string,idpersonal:string) {
+      const PERU_TIMEZONE = 'America/Lima';
+      const today: Date = new Date();
+      const monthName = today.toLocaleString('default', { month: 'long' });
+      const recupera_hora_permiso:string[][] = await this.googleXlsxService.getRows(monthName,"AG4","AG4",this.spredSheetId)
+      
+  
+
+    }
+    async setHorasTardanzas(){
+        const lastRow = await this.googleXlsxService.getLastValueInColumnv2(nameSheets.REGISTROPERSONAL, "E", "AE", this.spredSheetId)
+
+    }
+    async setHorasExtras(){
+        const lastRow = await this.googleXlsxService.getLastValueInColumnv2(nameSheets.REGISTROPERSONAL, "E", "AE", this.spredSheetId)
+
+    }
+    
+
     //las asistencias, se deben mostrar por periodos
     //semanales o mensuales.
     async getAllAsistenciaMonth(mes: string) {
@@ -150,8 +219,9 @@ export class PersonalService {
 
         return ve
     }
-    async insertaPersonal(data: Personal) {
-        let nuevoPersonal = new Personal()
+    async insertaPersonal(data: PersonalDto) {
+      this.googleXlsxService.updateCellBackgroundColor("1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8","September","C4",{red:0,blue:1,green:0})
+        let nuevoPersonal = new PersonalDto()
         nuevoPersonal.nombresapellidos = data.nombresapellidos.toUpperCase()
         nuevoPersonal.dni = data.dni.toUpperCase()
         nuevoPersonal.celular = data.celular.toUpperCase()
@@ -163,11 +233,34 @@ export class PersonalService {
         const lastPersonal = await this.googleXlsxService.getLastValueInColumnv2("REGISTROPERSONAL", "A", "A", "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
         vector[0] = consecutivo("PER",lastPersonal)
         console.log(nuevoPersonal)
+        //el idpersonal nuevo se tiene que agregar a la planilla
+        
         const newPersonal = await this.googleXlsxService.setRow([vector], `REGISTROPERSONAL!A${lastPersonal + 1}:E${lastPersonal + 1}`, "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
         return newPersonal
 
     }
-}
+    async insertaPlanilla(planilla: PlanillaDto) {
+        let nuevoPlanilla = new PlanillaDto()
+        nuevoPlanilla.idpersonal = planilla.idpersonal.toUpperCase()
+        nuevoPlanilla.categoria = planilla.categoria.toUpperCase()
+        nuevoPlanilla.fechaingreso = planilla.fechaingreso.toUpperCase()
+        nuevoPlanilla.adelanto_monto = planilla.adelanto_monto
+        nuevoPlanilla.adelanto_fecha = planilla.adelanto_fecha.toUpperCase()
+        nuevoPlanilla.dias_trabajados = planilla.dias_trabajados
+        nuevoPlanilla.horas_extra = planilla.horas_extra
+        nuevoPlanilla.pago_x_dia = planilla.pago_x_dia
+        nuevoPlanilla.observacion = planilla.observacion.toUpperCase()
+
+        nuevoPlanilla.idplanilla = consecutivo("PLA", 1)
+        //const atributos = obtenerPropiedades(nuevoPlanilla);
+        const vector = Object.keys(nuevoPlanilla).map(key => nuevoPlanilla[key]);
+
+        const lastPlanilla = await this.googleXlsxService.getLastValueInColumnv2("PLANILLA", "A", "A", "1jrBtnOQQJSBLoR4PTPfThuHnCpci-BCPfeHQn-6u0b8")
+        vector[0] = consecutivo("PLA", lastPlanilla)
+        console.log(nuevoPlanilla)
+    }
+  }   
+
 
 /**
  * Compara si una fecha dada en formato MM/DD/YYYY es igual a la fecha actual.
@@ -360,11 +453,93 @@ function getWeekRangeExcludingSunday(dateString: string): DateRange {
   };
 }
 
-// Ejemplo de uso con la fecha "24/09/2025"
-const date1 = "24/09/2025";
-const weekRange = getWeekRangeExcludingSunday(date1);
+/**
+ * Función para encontrar el índice del array que contiene el valor buscado.
+ * @param array El array anidado a buscar.
+ * @param valorBuscado El string a encontrar dentro de los arrays internos.
+ * @returns El índice del array encontrado, o -1 si el valor no se encuentra.
+ */
+function encontrarPosicion(array: string[][], valorBuscado: string): number {
+  // Utilizamos findIndex para encontrar el índice del primer elemento (array interno)
+  // que cumpla la condición. La condición es que el primer elemento de ese array interno
+  // sea igual al valorBuscado.
+  const indice: number = array.findIndex(
+      (elementoInterno: string[]) => elementoInterno[0] === valorBuscado
+  );
 
-console.log(`Fecha de entrada: ${date1}`);
-console.log(`Rango de la semana (sin domingo): ${weekRange.startDate} - ${weekRange.endDate}`);
+  return indice;
+}
+/**
+ * Calcula la diferencia absoluta en minutos entre dos cadenas de fecha dadas
+ * en el formato Día/Mes/Año, HH:mm:ss.
+ *
+ * @param fecha1 La primera cadena de fecha/hora (ej: "28/09/2025, 23:44:53").
+ * @param fecha2 La segunda cadena de fecha/hora (ej: "28/09/2025, 12:44:53").
+ * @returns La diferencia en minutos (un número flotante) entre las dos fechas.
+ */
+function calcularDiferenciaEnMinutos(fecha1: string, fecha2: string): number {
+  // 1. Parsea las fechas usando la función robusta.
+  const date1: Date = parsearFechaDMA(fecha1);
+  const date2: Date = parsearFechaDMA(fecha2);
 
-// Resultado esperado: 22/09/2025 - 27/09/2025
+  // 2. Obtiene el tiempo en milisegundos y calcula la diferencia absoluta.
+  const ms1: number = date1.getTime();
+  const ms2: number = date2.getTime();
+  const diferenciaMs: number = Math.abs(ms1 - ms2);
+
+  // 3. Convierte milisegundos a minutos.
+  const msEnUnMinuto: number = 60000; // 1000 ms/s * 60 s/min
+  const diferenciaMinutos: number = diferenciaMs / msEnUnMinuto;
+
+  return diferenciaMinutos;
+}
+/**
+ * Genera una cadena de fecha/hora formateada en la zona horaria de Perú (24 horas).
+ * El formato resultante será similar a "28/09/2025, 19:12:32".
+ * @param date El objeto Date a formatear.
+ * @returns Una cadena de fecha y hora localizada.
+ */
+function generarFechaFormateada(date: Date): string {
+  const PERU_TIMEZONE: string = 'America/Lima';
+  return date.toLocaleString('es-PE', {
+      timeZone: PERU_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false // Formato de 24 horas
+  });
+}
+
+/**
+ * Parsea una cadena de fecha con formato Día/Mes/Año, HH:mm:ss
+ * y devuelve un objeto Date válido.
+ *
+ * @param fechaCadena La cadena de fecha en formato DD/MM/YYYY, HH:mm:ss (ej: "28/09/2025, 19:21:59").
+ * @returns Un objeto Date.
+ */
+function parsearFechaDMA(fechaCadena: string): Date {
+  // Expresión regular para capturar los componentes: DD/MM/YYYY, HH:mm:ss
+  const regex = /(\d{2})\/(\d{2})\/(\d{4}), (\d{2}):(\d{2}):(\d{2})/;
+  const partes = fechaCadena.match(regex);
+
+  if (!partes) {
+      throw new Error(`Formato de fecha no válido: "${fechaCadena}". Se esperaba DD/MM/YYYY, HH:mm:ss.`);
+  }
+
+  // parts[1] = Día, parts[2] = Mes, parts[3] = Año
+  // parts[4] = Hora, parts[5] = Minuto, parts[6] = Segundo
+
+  const dia = parseInt(partes[1], 10);
+  const mes = parseInt(partes[2], 10);
+  const año = parseInt(partes[3], 10);
+  const hora = parseInt(partes[4], 10);
+  const minuto = parseInt(partes[5], 10);
+  const segundo = parseInt(partes[6], 10);
+
+  // NOTA IMPORTANTE: El mes en el constructor Date() es base 0 (0 = Enero, 11 = Diciembre).
+  // Por eso restamos 1 al valor del mes capturado.
+  return new Date(año, mes - 1, dia, hora, minuto, segundo);
+}

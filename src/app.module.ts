@@ -11,6 +11,7 @@ import { configLoader } from 'config-loader';
 import { envSchema } from 'env-schema';
 import { MongooseModule } from '@nestjs/mongoose';
 import { GoogleXlsxService } from './managergooglexls/services/google.manager.xls.service';
+
 //coleccion de hojas de calculo, renombradas con un alias
 
 interface ITable{
